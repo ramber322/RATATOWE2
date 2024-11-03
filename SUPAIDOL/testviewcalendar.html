@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <title>SUPAIDOLUSER VIEWCALENDAR</title>
+    <style>
+        .dropdown {
+            display: none;
+        }
+        #eventModal {
+            background: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <header class="bg-black text-white py-4 relative">
+        <div class="container mx-auto px-4 flex items-center justify-between">
+            <a href="/SUPAIDOL/Dashboard.html">
+                <img style="width: 40px; height: 40px;" src="https://www.spc.edu.ph/wp-content/uploads/2023/05/spc-logo-footer-1.png">
+            </a>
+            <nav class="space-x-4 ml-auto">
+                <a href="#" class="text-white hover:underline">View Calendar</a>
+            </nav>
+            <div class="relative ml-4">
+                <button id="dropdownButton" class="focus:outline-none">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md">
+                        <span class="text-blue-600 font-bold">⚙️</span>
+                    </div>
+                </button>
+                <div id="dropdown" class="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg z-10 hidden">
+                    <button id="activityLogButton" class="block w-full text-left px-4 py-2 text-gray-800 hover:bg-gray-200">Activity Log</button>
+                    <button id="logoutButton" class="block w-full text-left px-4 py-2 text-gray-800 hover:bg-gray-200">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto mt-8 px-4">
+        <section class="mt-8">
+            <div class="flex items-center justify-between mb-4">
+                <button id="prevMonth" class="text-xl p-2 bg-gray-200 rounded hover:bg-gray-300">←</button>
+                <h3 id="monthYear" class="text-lg font-semibold"></h3>
+                <button id="nextMonth" class="text-xl p-2 bg-gray-200 rounded hover:bg-gray-300">→</button>
+            </div>
+            <div class="grid grid-cols-7 gap-4 mb-4 text-center">
+                <div class="font-bold">Monday</div>
+                <div class="font-bold">Tuesday</div>
+                <div class="font-bold">Wednesday</div>
+                <div class="font-bold">Thursday</div>
+                <div class="font-bold">Friday</div>
+                <div class="font-bold">Saturday</div>
+                <div class="font-bold">Sunday</div>
+            </div>
+            <div class="grid grid-cols-7 gap-4" id="calendarGrid"></div>
+        </section>
+    </main>
+
+    <!-- Modal -->
+    <div id="eventModal" class="fixed inset-0 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-11/12 md:w-1/3">
+            <h2 id="modalTitle" class="text-xl font-bold"></h2>
+            <div id="modalDescription"></div>
+            <button id="closeModal" class="mt-2 bg-gray-300 text-gray-800 py-2 px-4 rounded">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const calendarGrid = document.getElementById('calendarGrid');
+        const monthYear = document.getElementById('monthYear');
+        const eventModal = document.getElementById('eventModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalDescription = document.getElementById('modalDescription');
+        const closeModal = document.getElementById('closeModal');
+        const token = localStorage.getItem('token');
+        let currentDate = new Date();
+        let events = []; // Initialize an empty array for events
+
+        async function fetchEvents() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/fetchEvents'); // Call your API
+                const data = await response.json();
+                if (data.success) {
+                    events = data.events; // Store the fetched events
+                } else {
+                    console.error('Failed to fetch events:', data.message);
+                }
+            } catch (error) {
+                console.error('Error fetching events:', error);
+            }
+        }
+
+        function renderCalendar() {
+            calendarGrid.innerHTML = '';
+            const month = currentDate.getMonth();
+            const year = currentDate.getFullYear();
+
+            monthYear.textContent = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startDay = firstDay.getDay();
+            const offset = (startDay === 0) ? 6 : startDay - 1;
+
+            for (let i = 0; i < offset; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'h-20 border rounded-lg';
+                calendarGrid.appendChild(emptyCell);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const dayCell = document.createElement('div');
+                dayCell.className = 'h-20 border rounded-lg flex items-center justify-center text-xl relative';
+                dayCell.textContent = day;
+
+                const dayEvents = events.filter(event => event.event_date === dateStr);
+                if (dayEvents.length > 0) {
+                    dayCell.classList.add('bg-green-400'); // Highlight days with events
+                    dayCell.eventDetails = dayEvents; // Store all events for that day
+
+                    dayCell.addEventListener('click', showModal);
+                }
+
+                calendarGrid.appendChild(dayCell);
+            }
+        }
+
+        function showModal(event) {
+            const eventsOnDate = event.target.eventDetails; // Get all events for that date
+
+            modalTitle.textContent = `Events on ${eventsOnDate[0].event_date}`; // Title can indicate the date
+            modalDescription.innerHTML = ''; // Clear previous content
+
+            // Create event entries with individual register buttons
+            eventsOnDate.forEach(evt => {
+                const eventEntry = document.createElement('div');
+                eventEntry.classList.add('mb-4');
+
+                const eventDetailsHTML = `
+                    <strong>${evt.title}</strong><br>
+                    Time: ${evt.event_time}<br>
+                    Location: ${evt.location}<br>
+                    Description: ${evt.description}<br>
+                `;
+                eventEntry.innerHTML = eventDetailsHTML;
+
+                const registerButton = document.createElement('button');
+                registerButton.textContent = 'Register';
+                registerButton.classList.add('mt-2', 'bg-blue-500', 'text-white', 'py-1', 'px-2', 'rounded');
+
+                // Set an event listener for the register button
+                registerButton.addEventListener('click', async () => {
+                    const response = await fetch('http://127.0.0.1:8000/api/registerEvent', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` // Include user's access token if using token-based auth
+                        },
+                        body: JSON.stringify({ event_id: evt.id })
+                    });
+
+                    const data = await response.json();
+                    if (data.success) {
+                        alert(`Registered for "${evt.title}"!`);
+                    } else {
+                        alert('Registration failed: ' + data.message);
+                    }
+                });
+
+                eventEntry.appendChild(registerButton);
+                modalDescription.appendChild(eventEntry);
+            });
+
+            eventModal.classList.remove('hidden');
+        }
+
+        closeModal.addEventListener('click', () => {
+            eventModal.classList.add('hidden');
+        });
+
+        document.getElementById('prevMonth').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderCalendar();
+        });
+
+        document.getElementById('nextMonth').addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderCalendar();
+        });
+
+        // Initial fetch and render
+        fetchEvents().then(() => {
+            renderCalendar();
+        });
+    </script>
+</body>
+</html>

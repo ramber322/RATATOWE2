@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <title>Dashboard</title>
+    <script>
+        // Check if the user is logged in by looking for a token in localStorage
+        const token = localStorage.getItem("token");
+        
+        if (!token) {
+            // Redirect to login page if no token is found
+            window.location.href = "login.html";
+        }
+    </script>
+</head>
+<body class="bg-gray-100">
+    <header class="bg-black text-white py-4 relative">
+        <div class="container mx-auto px-4 flex items-center justify-between">
+            <img style="width: 40px; height: 40px;" src="https://www.spc.edu.ph/wp-content/uploads/2023/05/spc-logo-footer-1.png">
+            <nav class="space-x-4 ml-auto">
+                <a href="/FRONTSCHOOLEVENT/Calender.html" class="text-white hover:underline">View Calendar</a>
+            </nav>
+            <div class="relative ml-4">
+                <button id="dropdownButton" class="focus:outline-none">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-md">
+                        <span class="text-blue-600 font-bold">⚙️</span>
+                    </div>
+                </button>
+                <div id="dropdown" class="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-lg z-10 hidden">
+                    <button id="activityLogButton" class="block w-full text-left px-4 py-2 text-gray-800 hover:bg-gray-200">Activity Log</button>
+                    <button id="logoutButton" class="block w-full text-left px-4 py-2 text-gray-800 hover:bg-gray-200">Logout</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto mt-8 px-4">
+        <h2 class="text-xl font-semibold">Welcome to your dashboard!</h2>
+        <p class="mt-2 text-gray-700">Here you can manage your account and settings.</p>
+
+        <!-- Modal Structure -->
+        <div id="eventModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden">
+            <div class="bg-white rounded-lg p-6 w-11/12 md:w-1/2">
+                <h2 id="modalTitle" class="text-xl font-semibold"></h2>
+                <div id="modalDescription" class="mt-4"></div>
+                <button id="closeModal" class="mt-4 bg-red-500 text-white py-2 px-4 rounded">Close</button>
+            </div>
+        </div>
+
+        <!-- Upcoming Events Section -->
+        <section class="bg-blue-500 text-white rounded-lg p-6 mt-6" id="upcomingEventsContainer">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold">UPCOMING EVENTS</h3>
+                    <p class="text-sm">NEXT 30 DAYS</p>
+                </div>
+            </div>
+            <div class="mt-4" id="upcomingEventsList">
+                <!-- Dynamically populated upcoming events will go here -->
+            </div>
+        </section>
+
+       <!-- Registered Events Section -->
+        <section class="bg-green-500 text-white rounded-lg p-6 mt-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold">REGISTERED EVENTS</h3>
+                    <p class="text-sm">Events You've Signed Up For</p>
+                </div>
+            </div>
+            <div class="mt-4" id="registeredEventsContainer">
+                <!-- Dynamically populated registered events will go here -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Fetch and display upcoming events
+        document.addEventListener("DOMContentLoaded", function() {
+            const token = localStorage.getItem("token");
+            const container = document.getElementById("upcomingEventsList"); // Define container here
+            
+            if (token) {
+                fetch("http://127.0.0.1:8000/api/getUpcomingEvents", {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.events.length > 0) {
+                        data.events.forEach(event => {
+                            const eventDate = new Date(event.event_date);
+                            const options = { month: 'short', day: 'numeric' };
+                            const formattedDate = eventDate.toLocaleDateString('en-US', options).toUpperCase();
+                            
+                            const eventItem = document.createElement("div");
+                            eventItem.className = "flex items-center justify-between mt-2 bg-white text-blue-500 rounded-lg p-3";
+                            eventItem.innerHTML = `
+                                <span class="bg-blue-500 text-white rounded-full px-3 py-1 font-semibold text-lg">${event.id}</span>
+                                <span class="flex-1 ml-3 font-semibold">${event.title}</span>
+                                <a href="#" class="text-blue-400 text-sm quick-view-link" data-event-details='${JSON.stringify(event)}'>Quick View</a>
+                            `;
+                            container.appendChild(eventItem);
+                        });
+                    } else {
+                        const noEventsMessage = document.createElement("div");
+                        noEventsMessage.className = "text-gray-200 mt-2";
+                        noEventsMessage.textContent = "No upcoming events found.";
+                        container.appendChild(noEventsMessage);
+                    }
+                })
+                .catch(error => console.error("Error fetching upcoming events:", error));
+            }
+
+            // Event listener for dynamically created "Quick View" links
+            container.addEventListener("click", function(e) {
+                if (e.target.classList.contains('quick-view-link')) {
+                    const eventDetails = e.target.dataset.eventDetails; // Get event details from data attribute
+                    showModal(eventDetails);
+                }
+            });
+        });
+
+        function showModal(eventDetails) {
+            const eventsOnDate = JSON.parse(eventDetails); // Parse the JSON string into an object
+            const modalTitle = document.getElementById('modalTitle');
+            const modalDescription = document.getElementById('modalDescription');
+            const eventModal = document.getElementById('eventModal');
+
+            modalTitle.textContent = `${eventsOnDate.title}`; // Set the modal title
+            modalDescription.innerHTML = ''; // Clear previous content
+
+            const eventDetailsHTML = `
+                <strong>${eventsOnDate.title}</strong><br>
+                Time: ${eventsOnDate.event_time}<br>
+                Location: ${eventsOnDate.location}<br>
+                Description: ${eventsOnDate.description}<br>
+            `;
+            const eventEntry = document.createElement('div');
+            eventEntry.innerHTML = eventDetailsHTML;
+
+            const registerButton = document.createElement('button');
+            registerButton.textContent = 'Register';
+            registerButton.classList.add('mt-2', 'bg-blue-500', 'text-white', 'py-1', 'px-2', 'rounded');
+
+            // Set an event listener for the register button
+            registerButton.addEventListener('click', async () => {
+                const response = await fetch('http://127.0.0.1:8000/api/registerEvent', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ event_id: eventsOnDate.id })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert(`Registered for "${eventsOnDate.title}"!`);
+                } else {
+                    alert('Registration failed: ' + data.message);
+                }
+            });
+
+            eventEntry.appendChild(registerButton);
+            modalDescription.appendChild(eventEntry);
+            eventModal.classList.remove('hidden'); // Show the modal
+        }
+
+        // Close modal event listener
+        document.getElementById('closeModal').addEventListener('click', () => {
+            document.getElementById('eventModal').classList.add('hidden');
+        });
+
+        // Fetch and display registered events
+        document.addEventListener("DOMContentLoaded", function() {
+            const token = localStorage.getItem("token");
+            
+            if (token) {
+                fetch("http://127.0.0.1:8000/api/getRegisteredEvents", {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const container = document.getElementById("registeredEventsContainer");
+                    if (data.success && data.events.length > 0) {
+                        data.events.forEach(event => {
+                            const eventDate = new Date(event.event_date);
+                            const options = { month: 'short', day: 'numeric' };
+                            const formattedDate = eventDate.toLocaleDateString('en-US', options).toUpperCase();
+
+                            const eventItem = document.createElement("div");
+                            eventItem.className = "flex items-center justify-between mt-2 bg-white text-green-500 rounded-lg p-3";
+                            eventItem.innerHTML = `
+                                <span class="bg-green-500 text-white rounded-full px-3 py-1 font-semibold text-lg">✓</span>
+                                <span class="flex-1 ml-3 font-semibold">${event.title}</span>
+                                <span class="text-gray-500 text-sm">${formattedDate}</span>
+                            `;
+                            container.appendChild(eventItem);
+                        });
+                    } else {
+                        const noEventsMessage = document.createElement("div");
+                        noEventsMessage.className = "text-gray-200 mt-2";
+                        noEventsMessage.textContent = "No registered events found.";
+                        container.appendChild(noEventsMessage);
+                    }
+                })
+                .catch(error => console.error("Error fetching registered events:", error));
+            }
+        });
+
+        // Script for Activity Log
+        const activityLogButton = document.getElementById("activityLogButton");
+        activityLogButton.addEventListener("click", function() {
+            window.location.href = "/FRONTSCHOOLEVENT/activity-log.html";
+        });
+
+        // Toggle Dropdown Menu visibility
+        const dropdownButton = document.getElementById("dropdownButton");
+        const dropdown = document.getElementById("dropdown");
+
+        dropdownButton.addEventListener("click", function() {
+            dropdown.classList.toggle("hidden");
+        });
+
+        // Logout functionality
+        const logoutButton = document.getElementById("logoutButton");
+        logoutButton.addEventListener("click", function() {
+            const token = localStorage.getItem("token");
+
+            fetch("http://127.0.0.1:8000/api/logout", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                localStorage.removeItem("token");
+                alert("Logged out successfully");
+                window.location.href = "login.html";
+            })
+            .catch(error => console.error("Error:", error));
+        });
+    </script>
+</body>
+</html>
